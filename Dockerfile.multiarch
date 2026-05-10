@@ -13,9 +13,8 @@ RUN mkdir -p /root/.ssh && \
 RUN --mount=type=ssh \
     git clone git@github.com:FKinf/Zadanie1AplikacjaPogodowaDodatkowe.git .
 
-
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir --prefix=/install -r requirements.txt
+    pip install --no-cache-dir --prefix=/install -r app/requirements.txt
 
 FROM python:3.12-slim AS final
 

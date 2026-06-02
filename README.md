@@ -1,129 +1,63 @@
-# Zadanie 2 — Technologie Chmurowe
+# Zadanie 2 - Filip Kwietniak
 
 ## Opis
 
-Repozytorium zawiera pipeline GitHub Actions, który automatycznie buduje obraz kontenera aplikacji pogodowej, skanuje go pod kątem podatności CVE i publikuje na GitHub Container Registry (ghcr.io).
-
----
-
-## Struktura repozytorium
-├── app/                        # Kod źródłowy aplikacji Flask
-├── Dockerfile                  # Główny Dockerfile (użyty w pipeline)
-├── Dockerfile.multiarch        # Alternatywny Dockerfile z klonowaniem SSH
-└── .github/
-└── workflows/
-└── docker-build.yml    # Pipeline GitHub Actions
----
+Repozytorium zawiera pipeline GitHub Actions, który automatycznie buduje wieloarchitekturowy obraz kontenera aplikacji, skanuje go pod kątem podatności CVE przy użyciu narzędzia Trivy i publikuje w GitHub Container Registry.
 
 ## Pipeline GitHub Actions
-
 Pipeline uruchamia się automatycznie przy każdym pushu na gałąź `main`.
 
 ### Kroki pipeline:
 
-1. **Checkout** — pobranie kodu źródłowego
-2. **QEMU** — konfiguracja emulacji ARM64
-3. **Docker Buildx** — konfiguracja buildera wieloarchitekturowego
-4. **Login DockerHub** — logowanie do cache na DockerHub
-5. **Login ghcr.io** — logowanie do GitHub Container Registry
-6. **Metadata** — wyznaczenie tagów obrazu
-7. **Build (amd64)** — budowa obrazu tylko na amd64 do skanowania
-8. **Trivy CVE scan** — skanowanie obrazu pod kątem podatności CRITICAL i HIGH
-9. **Build & Push (multi-arch)** — budowa i publikacja obrazu na obie architektury (tylko jeśli skan przeszedł)
-
----
+1. Checkout — pobranie kodu źródłowego
+2. QEMU — konfiguracja emulacji ARM64
+3. Docker Buildx — konfiguracja buildera wieloarchitekturowego
+4. Login DockerHub — logowanie do cache na DockerHub
+5. Login ghcr.io — logowanie do GitHub Container Registry
+6. Metadata — wyznaczenie tagów obrazu
+7. Build (amd64) — budowa obrazu tylko na amd64 do skanowania
+8. Trivy CVE scan — skanowanie obrazu pod kątem podatności CRITICAL i HIGH
+9. Build & Push  — budowa i publikacja obrazu na obie architektury, pod warunkiem, że w skanie nie ma podatności Critical lub HIGH
 
 ## Tagowanie obrazów
 
-Obraz jest tagowany dwoma tagami jednocześnie:
+Na obrazie zastosowano dwa tagi:
 
 - `latest` — zawsze wskazuje na najnowszy obraz z gałęzi `main`
-- `sha-xxxxxxx` — unikalny tag oparty na skrócie commita Git (np. `sha-a1b2c3d`)
-
-### Uzasadnienie wyboru tagowania
-
-Tag `latest` zapewnia łatwy dostęp do najnowszej wersji obrazu bez znajomości konkretnego SHA. Jest standardem w środowiskach deweloperskich i testowych.
-
-Tag `sha-xxxxxxx` oparty na skrócie commita Git zapewnia pełną identyfikowalność (traceability) — można jednoznacznie powiązać działający kontener z konkretnym stanem kodu źródłowego. Jest to zalecana praktyka w środowiskach produkcyjnych zgodnie z zasadami GitOps ([źródło: Docker docs — Image tagging best practices](https://docs.docker.com/build/ci/github-actions/manage-tags-labels/)).
-
-Połączenie obu tagów daje kompromis między wygodą (`latest`) a bezpieczeństwem i odtwarzalnością (`sha-*`).
-
----
+  Uzasadnienie: Wskazuje na najnowszą wersję obrazu z gałęzi main. Ułatwia szybkie pobieranie najświeższego buildu.
+- `sha-xxxxxxx` — unikalny tag oparty na skrócie commita Git
+  Uzasadnienie: Tag zapewnia bezpieczeństwo i pewność że używamy odpowiedniej wersji. W przeciwieństwie do tagu latest, 'SHA' gwarantuje, że uruchamiamy dokładnie ten sam kod, który został przetestowany.
 
 ## Tagowanie cache
 
 Dane cache przechowywane są w publicznym repozytorium DockerHub `fkinf/weather-app-cache` pod tagiem `cache`.
 
-Użyto eksportera typu `registry` w trybie `max`, który zapisuje wszystkie warstwy pośrednie (nie tylko końcowe), co maksymalizuje skuteczność cache przy kolejnych buildach — szczególnie przy budowie wieloarchitekturowej.
+Użyto eksportera typu `registry` w trybie `max`, który zapisuje wszystkie warstwy pośrednie. Pozwala to na skrócenie czasu budowania przy kolejnych uruchomieniach pipeline, ponieważ Docker ponownie wykorzystuje już zbudowane warstwy.
 
----
 
-## Skanowanie CVE — Trivy
+## Skanowanie CVE
 
-Do skanowania obrazu użyto skanera **Trivy** (aquasecurity/trivy-action). 
+Do skanowania obrazu użyto skanera Trivy
 
-Trivy został wybrany zamiast Docker Scout z następujących powodów:
-- jest w pełni open-source
+Trivy zostało wybrane ponieważ:
 - działa natywnie w GitHub Actions bez dodatkowej konfiguracji konta
-- nie wymaga płatnego planu dla prywatnych repozytoriów
-- jest powszechnie stosowany w projektach open-source i środowiskach CI/CD
+- jest w pełni open-source oraz darmowe
+- jest powszechnie stosowany w projektach open-source
+- Umożliwia łatwą konfigurację przerwania pracy pipeline'u przez exit-code 1
 
-Skan sprawdza podatności sklasyfikowane jako **CRITICAL** i **HIGH**. Jeśli zostaną wykryte — pipeline zatrzymuje się i obraz **nie jest** publikowany na ghcr.io.
-
----
+Skan sprawdza podatności sklasyfikowane jako CRITICAL i HIGH. Jeśli zostaną wykryte — pipeline zatrzymuje się i obraz nie jest publikowany na ghcr.io.
 
 ## Sekrety
 
 W repozytorium skonfigurowano następujące sekrety:
-
-| Nazwa | Opis |
-|---|---|
-| `DOCKERHUB_USERNAME` | Nazwa użytkownika DockerHub (do cache) |
-| `DOCKERHUB_TOKEN` | Token dostępu DockerHub |
+`DOCKERHUB_USERNAME` - Nazwa użytkownika DockerHub
+`DOCKERHUB_TOKEN`  - Token dostępu DockerHub
 
 Token `GITHUB_TOKEN` jest dostarczany automatycznie przez GitHub Actions.
 
----
+## Potwierdzenie działania pipelne
+
+Pipeline został uruchomiony i zakończony pomyślnie. Link do uruchomienia: https://github.com/FKinf/Zadanie2AplikacjaPogodowa/actions/runs/26842797565
 
 ## Obraz na ghcr.io
-
-Obraz dostępny jest pod adresem:
-## Tagowanie cache
-
-Dane cache przechowywane są w publicznym repozytorium DockerHub `fkinf/weather-app-cache` pod tagiem `cache`.
-
-Użyto eksportera typu `registry` w trybie `max`, który zapisuje wszystkie warstwy pośrednie (nie tylko końcowe), co maksymalizuje skuteczność cache przy kolejnych buildach — szczególnie przy budowie wieloarchitekturowej.
-
----
-
-## Skanowanie CVE — Trivy
-
-Do skanowania obrazu użyto skanera **Trivy** (aquasecurity/trivy-action). 
-
-Trivy został wybrany zamiast Docker Scout z następujących powodów:
-- jest w pełni open-source
-- działa natywnie w GitHub Actions bez dodatkowej konfiguracji konta
-- nie wymaga płatnego planu dla prywatnych repozytoriów
-- jest powszechnie stosowany w projektach open-source i środowiskach CI/CD
-
-Skan sprawdza podatności sklasyfikowane jako **CRITICAL** i **HIGH**. Jeśli zostaną wykryte — pipeline zatrzymuje się i obraz **nie jest** publikowany na ghcr.io.
-
----
-
-## Sekrety
-
-W repozytorium skonfigurowano następujące sekrety:
-
-| Nazwa | Opis |
-|---|---|
-| `DOCKERHUB_USERNAME` | Nazwa użytkownika DockerHub (do cache) |
-| `DOCKERHUB_TOKEN` | Token dostępu DockerHub |
-
-Token `GITHUB_TOKEN` jest dostarczany automatycznie przez GitHub Actions.
-
----
-
-## Obraz na ghcr.io
-
-Obraz dostępny jest pod adresem:
-ghcr.io/fkinf/zadanie2aplikacjapogodowa:latest
+Obraz dostępny jest pod adresem: ghcr.io/fkinf/zadanie2aplikacjapogodowa:latest
